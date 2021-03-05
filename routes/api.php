@@ -19,3 +19,8 @@ Route::get(
     'exchange-rate',
     [ExchangeController::class, 'getExchangeRateJSON']
 )->name('exchange-rate');
+
+Route::get(
+    'exchange-rates',
+    [ExchangeController::class, 'getExchangeRatesJSON']
+)->name('exchange-rates');

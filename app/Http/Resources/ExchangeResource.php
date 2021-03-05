@@ -8,6 +8,7 @@ use Illuminate\Http\Resources\Json\ResourceResponse;
 
 class ExchangeResource extends JsonResource
 {
+
     public $resource = Exchange::class;
 
     /**

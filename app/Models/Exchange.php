@@ -66,7 +66,19 @@ class Exchange extends Model
         return $exchangeResource;
     }
 
+    public function getExchangeRates()
+    {
+        $this->validateExchangeRates();
 
+    }
+
+    public function getExchangeRatesJSON():ExchangeCollection
+    {
+        $exchangeRates = $this->getExchangeRates();
+        $exchangeCollection = new ExchangeCollection($exchangeRates);
+
+        return $exchangeCollection;
+    }
 
     public function downloadExchangeRate()
     {

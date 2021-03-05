@@ -16,4 +16,12 @@ class ExchangeController extends Controller
 
         return $exchange->getExchangeRateJSON();
     }
+
+    public function getExchangeRatesJSON(Request $request)
+    {
+        $data = $request->only('from', 'to', 'datePeriodFrom', 'datePeriodTo');
+        $exchange = new Exchange($data);
+
+        return $exchange->getExchangeRatesJSON();
+    }
 }
