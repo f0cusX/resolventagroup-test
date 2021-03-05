@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Models;
 
@@ -16,10 +17,11 @@ class Exchange extends Model
     use HasFactory;
 
     public $timestamps = false;
+    protected $dates = [];
 
     protected $fillable = [
-        'to',
         'from',
+        'to',
         'date',
         'rate',
         'datePeriodFrom',
@@ -40,21 +42,18 @@ class Exchange extends Model
         $this->validateExchangeRate();
 
         if (!($exchangeRate = $this->existExchangeRate())) {
-            if ($downloadedExchangeRate = $this->downloadExchangeRate()) {
-                if ($downloadedExchangeRate['date'] !== $this->date) {
-                    throw new ApiExchangeException("Exchange rate not found for {$this->date}");
-                }
-
-                return $this->insertExchangeRate($downloadedExchangeRate);
+            $downloadedExchangeRate = $this->downloadExchangeRate();
+            if ($downloadedExchangeRate['date'] !== $this->date) {
+                throw new ApiExchangeException("Exchange rate not found for {$this->date}");
             }
 
-            throw new ApiExchangeException('Failed to get exchange rate');
+            return $this->insertExchangeRate($downloadedExchangeRate);
         }
 
         return $exchangeRate;
     }
 
-    public function getExchangeRateJSON():ExchangeResource
+    public function getExchangeRateJSON(): ExchangeResource
     {
         $exchangeRate = $this->getExchangeRate();
         $exchangeResource = new ExchangeResource($exchangeRate);
@@ -69,10 +68,16 @@ class Exchange extends Model
     public function getExchangeRates()
     {
         $this->validateExchangeRates();
+        if (!($exchangeRates = $this->existExchangeRates())) {
+            $downloadedExchangeRates = $this->downloadExchangeRates();
 
+            return $this->insertExchangeRates($downloadedExchangeRates);
+        }
+
+        return $exchangeRates;
     }
 
-    public function getExchangeRatesJSON():ExchangeCollection
+    public function getExchangeRatesJSON(): ExchangeCollection
     {
         $exchangeRates = $this->getExchangeRates();
         $exchangeCollection = new ExchangeCollection($exchangeRates);
@@ -92,12 +97,54 @@ class Exchange extends Model
         return $responseData;
     }
 
-    public function insertExchangeRate(array $data)
+    public function downloadExchangeRates()
+    {
+        $startDate = reset($this->dates);
+        $endDate = end($this->dates);
+
+        $requestUrl = "https://api.exchangeratesapi.io/history?symbols={$this->to}&base={$this->from}&start_at={$startDate}&end_at={$endDate}";
+        $response = Http::get($requestUrl);
+        $responseData = $response->json();
+        if ($response->failed()) {
+            throw new ApiExchangeException($responseData['error']);
+        }
+
+        return $responseData;
+    }
+
+    public function insertExchangeRate(array $data): Exchange
     {
         $this->rate = $data['rates'][$this->to];
         $this->save();
 
         return $this;
+    }
+
+    public function insertExchangeRates(array $data)
+    {
+        if ($data) {
+            $insertData = [];
+            $exchangeCollection = collect();
+
+            foreach ($data['rates'] as $date => $rate) {
+                $insertData[] = [
+                    'from' => $this->from,
+                    'to' => $this->to,
+                    'date' => $date,
+                    'rate' => $rate[$this->to],
+                ];
+
+                $exchangeCollection->add(new self(end($insertData)));
+            }
+
+            foreach (array_chunk($insertData, 100) as $exchangeRate) {
+                $this->insertOrIgnore($exchangeRate);
+            }
+
+            return $exchangeCollection;
+        }
+
+        throw new ApiExchangeException('Failed to get exchange rate');
     }
 
     public function validateExchangeRate()
@@ -143,5 +190,39 @@ class Exchange extends Model
         }
 
         return $exchangeRate;
+    }
+
+    public function existExchangeRates()
+    {
+        $dates = $this->getDateArrayFromPeriod();
+
+        $exchangeRates = $this->where('from', $this->from)
+            ->where('to', $this->to)
+            ->whereIn('date', $dates)
+            ->get();
+
+        if ($exchangeRates->count() !== count($dates)) {
+            return false;
+        }
+
+        return $exchangeRates;
+    }
+
+    private function getDateArrayFromPeriod(): array
+    {
+        $endDate = new \DateTime($this->datePeriodTo);
+        $endDate->modify('+1 day');
+
+        $dateInterval = new \DatePeriod(
+            new \DateTime($this->datePeriodFrom),
+            new \DateInterval('P1D'),
+            $endDate,
+        );
+
+        foreach ($dateInterval as $date) {
+            $this->dates[] = $date->format('Y-m-d');
+        }
+
+        return $this->dates;
     }
 }
