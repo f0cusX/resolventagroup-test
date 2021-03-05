@@ -4,7 +4,6 @@ namespace App\Http\Resources;
 
 use App\Models\Exchange;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Http\Resources\Json\ResourceResponse;
 
 class ExchangeResource extends JsonResource
 {
